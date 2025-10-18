@@ -1,13 +1,15 @@
 import { getProducts } from "@/app/actions";
-import { DataTable } from "@/components/data-table";
-import { PaginationFeature } from "@/lib/pagination-feature";
+import { DataTable, DataTableSkeleton } from "@/components/data-table";
+import { ServerSidePaginationFeature } from "@/lib/pagination-feature";
 import type { Product } from "@/lib/types";
 import {
-	type ColumnDef,
-	createTable,
-	getCoreRowModel,
-	getPaginationRowModel,
+  type ColumnDef,
+  type PaginationState,
+  createTable,
+  getCoreRowModel,
+  getPaginationRowModel,
 } from "@tanstack/table-core";
+import { Suspense } from "react";
 
 const columns: ColumnDef<Product>[] = [
   {
@@ -64,10 +66,13 @@ type PageProps = {
   searchParams: Promise<{ pageIndex?: string; pageSize?: string }>;
 };
 
-export default async function Home({ searchParams }: PageProps) {
-  const params = await searchParams;
-  const pageIndex = Number(params.pageIndex) || 0;
-  const pageSize = Number(params.pageSize) || 10;
+type ProductsTableProps = {
+  pagination: PaginationState;
+  searchParams: { pageIndex?: string; pageSize?: string };
+};
+
+async function ProductsTable({ pagination, searchParams }: ProductsTableProps) {
+  const { pageIndex, pageSize } = pagination;
 
   // Fetch products from server action with pagination
   const { data: tableData, pageCount } = await getProducts({
@@ -76,17 +81,17 @@ export default async function Home({ searchParams }: PageProps) {
   });
 
   const table = createTable({
-    _features: [PaginationFeature],
+    _features: [ServerSidePaginationFeature],
     baseUrl: "/",
     data: tableData,
     columns,
     getRowId: (row) => String(row.id),
     initialState: {
-      pagination: { pageIndex, pageSize },
-      searchParams: params,
+      pagination,
+      searchParams,
     },
     state: {
-      pagination: { pageIndex, pageSize },
+      pagination,
     },
     pageCount,
     getCoreRowModel: getCoreRowModel(),
@@ -101,17 +106,23 @@ export default async function Home({ searchParams }: PageProps) {
     state: {
       ...prev.state,
       ...table.initialState,
-      searchParams: params,
+      searchParams,
     },
   }));
 
-  return (
-    <div className="min-h-screen p-8">
-      <div className="max-w-4xl mx-auto space-y-6">
-        <h1 className="text-3xl font-bold">Product Inventory</h1>
+  return <DataTable table={table} />;
+}
 
-        <DataTable table={table} />
-      </div>
-    </div>
+export default async function Page({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const pageIndex = Number(params.pageIndex) || 0;
+  const pageSize = Number(params.pageSize) || 10;
+  
+  const pagination: PaginationState = { pageIndex, pageSize };
+
+  return (
+    <Suspense fallback={<DataTableSkeleton columnCount={5} rowCount={pageSize} />}>
+      <ProductsTable pagination={pagination} searchParams={params} />
+    </Suspense>
   );
 }

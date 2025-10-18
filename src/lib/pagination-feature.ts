@@ -4,66 +4,29 @@ import type {
   TableFeature,
   TableState,
   Table as TanstackTable,
-  Updater,
 } from "@tanstack/table-core";
 
-export type NextSearchParams = Record<string, string | string[] | undefined>;
-
-export interface TableComponentProps<TData> {
-  table: TanstackTable<TData>;
-}
-
-export interface SearchParamsTableState {
-  searchParams?: NextSearchParams;
-}
-
-export interface SearchParamsOptions {
-  baseUrl?: string;
-  onSearchParamsChange?: (updater: Updater<NextSearchParams>) => void;
-}
-
-/**
- * Methods added to the table instance for managing search parameters.
- * @template TData - The type of data in the table rows
- */
-export interface SearchParamsInstance<TData> {
-  /**
-   * Generates link props with updated table state.
-   * @param changes - Partial table state changes to apply
-   * @returns Object with href property containing the generated URL
-   */
-  getLinkProps: (changes: Partial<TableState>) => {
-    href: string;
-  };
-
-  /**
-   * Updates the search parameters.
-   * @param updater - Function or value to update search params
-   */
-  setSearchParams: (updater: Updater<NextSearchParams>) => void;
-
-  /**
-   * Gets link props for the current table state.
-   * @returns Object with href property for the current state
-   */
-  getCurrentLink: () => { href: string };
-}
+type NextSearchParams = Record<string, string | string[] | undefined>;
 
 declare module "@tanstack/table-core" {
-  interface TableState extends SearchParamsTableState {}
-  interface InitialTableState extends SearchParamsTableState {}
-  interface TableOptionsResolved<TData extends RowData>
-    extends SearchParamsOptions {}
-  interface Table<TData extends RowData> extends SearchParamsInstance<TData> {}
-}
+  interface TableState {
+    searchParams?: NextSearchParams;
+  }
 
-/**
- * Default pagination configuration
- */
-const DEFAULT_PAGINATION: PaginationState = {
-  pageIndex: 0,
-  pageSize: 10,
-};
+  interface InitialTableState {
+    searchParams?: NextSearchParams;
+  }
+
+  // baseUrl is used to build the href for the table
+  interface TableOptionsResolved<TData extends RowData> {
+    baseUrl?: string;
+  }
+
+  interface Table<TData extends RowData> {
+    buildNewHref: (changes: Partial<TableState>) => string;
+    getCurrentHref: () => string;
+  }
+}
 
 /**
  * Builds a URLSearchParams object from NextSearchParams.
@@ -81,7 +44,6 @@ function buildURLSearchParams(params: NextSearchParams): URLSearchParams {
     }
 
     if (Array.isArray(value)) {
-      // Append each array value separately
       for (const v of value) {
         searchParams.append(key, v);
       }
@@ -93,123 +55,45 @@ function buildURLSearchParams(params: NextSearchParams): URLSearchParams {
   return searchParams;
 }
 
-/**
- * Merges pagination state with changes, preserving non-pagination parameters.
- *
- * @param currentParams - Current search parameters
- * @param currentPagination - Current pagination state
- * @param paginationChanges - Pagination changes to apply
- * @returns Merged search parameters
- */
-function mergePaginationParams(
-  currentParams: NextSearchParams,
-  currentPagination: PaginationState,
-  paginationChanges?: Partial<PaginationState>,
-): NextSearchParams {
-  // Merge pagination changes with current state
-  const newPagination = {
-    ...currentPagination,
-    ...paginationChanges,
-  };
+export const ServerSidePaginationFeature: TableFeature = {
+  getDefaultOptions: () => ({ baseUrl: "/" }),
 
-  // Build new params object
-  const nextParams: NextSearchParams = {
-    pageIndex: String(newPagination.pageIndex),
-    pageSize: String(newPagination.pageSize),
-  };
+  getInitialState: (state) => ({
+    searchParams: {},
+    ...state,
+    pagination: {
+      pageIndex: 0,
+      pageSize: 10,
+      ...state?.pagination,
+    },
+  }),
 
-  // Preserve non-pagination parameters
-  for (const [key, value] of Object.entries(currentParams)) {
-    if (key !== "pageIndex" && key !== "pageSize") {
-      nextParams[key] = value;
-    }
-  }
-
-  return nextParams;
-}
-
-/**
- * TanStack Table feature that integrates URL search parameters with table state.
- * This feature enables:
- * - Syncing pagination state with URL search params
- * - Generating links with updated table state
- * - Managing search parameters reactively
- *
- * @example
- * ```ts
- * import { createTable } from '@tanstack/table-core';
- *
- * const table = createTable({
- *   data,
- *   columns,
- *   _features: [PaginationFeature],
- *   baseUrl: '/users',
- *   onSearchParamsChange: (updater) => {
- *     // Handle URL updates
- *   }
- * });
- * ```
- */
-export const PaginationFeature: TableFeature = {
-  /**
-   * Initializes the table state with empty search parameters.
-   */
-  getInitialState: (state): SearchParamsTableState => {
-    return {
-      ...state,
-      searchParams: {},
-    };
-  },
-
-  /**
-   * Provides default options for the feature.
-   */
-  getDefaultOptions: (): SearchParamsOptions => {
-    return {
-      baseUrl: "/",
-    };
-  },
-
-  /**
-   * Enhances the table instance with search param methods.
-   */
   createTable: <TData extends RowData>(table: TanstackTable<TData>): void => {
-    /**
-     * Updates search parameters and triggers the onChange callback.
-     */
-    table.setSearchParams = (updater: Updater<NextSearchParams>) => {
-      table.options.onSearchParamsChange?.(updater);
+    // primary function to build the href for the table
+    table.buildNewHref = (changes: Partial<TableState>) => {
+			// 1. get the current state of the table
+      const { searchParams = {}, pagination = { pageIndex: 0, pageSize: 10 } } = table.getState();
+
+			// 2. merge the changes with the current state
+      const newPagination = { ...pagination, ...changes.pagination };
+      
+      // 3. omit the pageIndex and pageSize from the search params
+      const { pageIndex: _, pageSize: __, ...rest } = searchParams;
+
+			// 4. build the new search params
+      const nextParams = {
+        pageIndex: String(newPagination.pageIndex),
+        pageSize: String(newPagination.pageSize),
+        ...rest,
+      };
+
+      // 5. transform the new search params into a URLSearchParams object
+      const urlSearchParams = buildURLSearchParams(nextParams);
+
+			// 6. return the new href
+      return `${table.options.baseUrl}?${urlSearchParams.toString()}`;
     };
 
-    /**
-     * Generates link props with updated table state.
-     * Merges current state with proposed changes and builds a URL.
-     */
-    table.getLinkProps = (changes: Partial<TableState>) => {
-      const currentState = table.getState();
-      const currentParams = currentState.searchParams ?? {};
-      const currentPagination = currentState.pagination ?? DEFAULT_PAGINATION;
-
-      // Merge pagination changes and build new params
-      const nextParams = mergePaginationParams(
-        currentParams,
-        currentPagination,
-        changes.pagination,
-      );
-
-      // Convert to URLSearchParams and build href
-      const searchParams = buildURLSearchParams(nextParams);
-      const href = `${table.options.baseUrl}?${searchParams.toString()}`;
-
-      return { href };
-    };
-
-    /**
-     * Convenience method to get link props for the current state.
-     */
-    table.getCurrentLink = () => {
-      const currentState = table.getState();
-      return table.getLinkProps(currentState);
-    };
+    table.getCurrentHref = () => table.buildNewHref(table.getState());
   },
 };
