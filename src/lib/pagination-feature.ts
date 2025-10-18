@@ -1,5 +1,4 @@
 import type {
-  PaginationState,
   RowData,
   TableFeature,
   TableState,

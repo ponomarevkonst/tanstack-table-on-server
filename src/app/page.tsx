@@ -117,11 +117,13 @@ export default async function Page({ searchParams }: PageProps) {
   const params = await searchParams;
   const pageIndex = Number(params.pageIndex) || 0;
   const pageSize = Number(params.pageSize) || 10;
-  
+
   const pagination: PaginationState = { pageIndex, pageSize };
 
   return (
-    <Suspense fallback={<DataTableSkeleton columnCount={5} rowCount={pageSize} />}>
+    <Suspense
+      fallback={<DataTableSkeleton columnCount={5} rowCount={pageSize} />}
+    >
       <ProductsTable pagination={pagination} searchParams={params} />
     </Suspense>
   );
