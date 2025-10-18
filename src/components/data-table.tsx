@@ -3,14 +3,12 @@ import { flexRender } from "@tanstack/react-table";
 import Form from "next/form";
 import Link from "next/link";
 import type {
-  Header,
   HeaderGroup,
   Row,
   Table as TanstackTable,
   Header as TanstackHeader,
 } from "@tanstack/table-core";
-import type { Cell, Cell as TanstackCell } from "@tanstack/react-table";
-import type { Table as TanstackTableCore } from "@tanstack/table-core";
+import type { Cell as TanstackCell } from "@tanstack/react-table";
 
 /**
  * Skeleton loader animation component
@@ -84,22 +82,63 @@ export function TableBody<TData>({ table }: { table: TanstackTable<TData> }) {
 /**
  * Available page size options for the pagination control.
  */
-const PAGE_SIZE_OPTIONS = [10, 20, 50] as const;
+const PAGE_SIZE_OPTIONS = [5, 10, 20] as const;
 
 /**
- * Renders pagination controls for the table.
- * Includes:
- * - Page size selector with Apply button
- * - Current page indicator
- * - Previous/Next navigation buttons
- *
- * Navigation uses Next.js Links with URL search params for browser history support.
+ * Renders page size selector with Apply button.
+ * Allows users to change how many rows are displayed per page.
  *
  * @template TData - The type of data in the table rows
  * @param props - Component props
- * @returns The rendered pagination controls
+ * @returns The rendered page size selector
  */
-export function TablePagination<TData>({
+export function TablePaginationSize<TData>({
+  table,
+}: {
+  table: TanstackTable<TData>;
+}) {
+  const { pageIndex, pageSize } = table.getState().pagination;
+  const pageCount = table.getPageCount();
+
+  return (
+    <div className="flex items-center gap-2">
+      <Form action="/" className="flex items-center gap-2">
+        <input type="hidden" name="pageIndex" value={pageIndex} />
+        <select
+          name="pageSize"
+          defaultValue={pageSize}
+          className="border border-gray-300 rounded px-2 py-1 text-sm"
+        >
+          {PAGE_SIZE_OPTIONS.map((size) => (
+            <option key={size} value={size}>
+              {size} rows
+            </option>
+          ))}
+        </select>
+        <button
+          type="submit"
+          className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50"
+        >
+          Apply
+        </button>
+      </Form>
+      <div className="text-gray-500 text-sm">
+        Page {pageIndex + 1} of {pageCount}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Renders Previous/Next navigation buttons for the table.
+ * Uses Next.js Links with URL search params for browser history support.
+ * Buttons are disabled when navigation is not possible.
+ *
+ * @template TData - The type of data in the table rows
+ * @param props - Component props
+ * @returns The rendered navigation buttons
+ */
+export function TablePaginationNavigation<TData>({
   table,
 }: {
   table: TanstackTable<TData>;
@@ -107,72 +146,37 @@ export function TablePagination<TData>({
   const { pageIndex, pageSize } = table.getState().pagination;
   const canGoPrevious = table.getCanPreviousPage();
   const canGoNext = table.getCanNextPage();
-  const pageCount = table.getPageCount();
 
   // Generate href for previous page
-  const previousHref = canGoPrevious
-    ? table.buildNewHref({
-        pagination: { pageIndex: pageIndex - 1, pageSize },
-      })
-    : table.getCurrentHref();
+  const previousHref = table.buildNewHref({
+    pagination: { pageIndex: pageIndex - 1, pageSize },
+  });
 
   // Generate href for next page
-  const nextHref = canGoNext
-    ? table.buildNewHref({
-        pagination: { pageIndex: pageIndex + 1, pageSize },
-      })
-    : table.getCurrentHref();
+  const nextHref = table.buildNewHref({
+    pagination: { pageIndex: pageIndex + 1, pageSize },
+  });
 
   return (
-    <div className="flex items-center justify-between">
-      {/* Left side: Page size selector and page info */}
-      <div className="flex items-center gap-2">
-        <Form action="/" className="flex items-center gap-2">
-          <input type="hidden" name="pageIndex" value={pageIndex} />
-          <select
-            name="pageSize"
-            defaultValue={pageSize}
-            className="border border-gray-300 rounded px-2 py-1 text-sm"
-          >
-            {PAGE_SIZE_OPTIONS.map((size) => (
-              <option key={size} value={size}>
-                {size} rows
-              </option>
-            ))}
-          </select>
-          <button
-            type="submit"
-            className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50"
-          >
-            Apply
-          </button>
-        </Form>
-        <div className="text-gray-500 text-sm">
-          Page {pageIndex + 1} of {pageCount}
-        </div>
-      </div>
-
-      {/* Right side: Navigation buttons */}
-      <div className="flex items-center gap-2">
-        <Link
-          href={previousHref}
-          className={`px-3 py-1 border border-gray-300 rounded text-sm ${
-            !canGoPrevious
-              ? "opacity-50 cursor-not-allowed"
-              : "hover:bg-gray-50"
-          }`}
+    <div className="flex items-center gap-2">
+      <Link href={previousHref}>
+        <button
+          type="button"
+          disabled={!canGoPrevious}
+          className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           Previous
-        </Link>
-        <Link
-          href={nextHref}
-          className={`px-3 py-1 border border-gray-300 rounded text-sm ${
-            !canGoNext ? "opacity-50 cursor-not-allowed" : "hover:bg-gray-50"
-          }`}
+        </button>
+      </Link>
+      <Link href={nextHref}>
+        <button
+          type="button"
+          disabled={!canGoNext}
+          className="px-3 py-1 border border-gray-300 rounded text-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
         >
           Next
-        </Link>
-      </div>
+        </button>
+      </Link>
     </div>
   );
 }
@@ -213,7 +217,10 @@ export function DataTable<TData>({ table }: { table: TanstackTable<TData> }) {
           <TableBody table={table} />
         </table>
       </div>
-      <TablePagination table={table} />
+      <div className="flex items-center justify-between">
+        <TablePaginationSize table={table} />
+        <TablePaginationNavigation table={table} />
+      </div>
     </div>
   );
 }
