@@ -159,7 +159,7 @@ export function TablePaginationNavigation<TData>({
 
   return (
     <div className="flex items-center gap-2">
-      <Link href={previousHref}>
+      <Link prefetch href={previousHref}>
         <button
           type="button"
           disabled={!canGoPrevious}
@@ -168,7 +168,7 @@ export function TablePaginationNavigation<TData>({
           Previous
         </button>
       </Link>
-      <Link href={nextHref}>
+      <Link prefetch href={nextHref}>
         <button
           type="button"
           disabled={!canGoNext}
